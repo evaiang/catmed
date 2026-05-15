@@ -1,0 +1,330 @@
+/* ===================================
+   猫药管家 — 样式文件
+   你可以自由修改颜色、间距、字体等
+   =================================== */
+
+:root {
+    /* 主色调（粉色系，可改成你喜欢的） */
+    --color-primary: #FF6B8E;
+    --color-primary-dark: #D94A6E;
+    --color-primary-light: #FFE0E8;
+
+    /* 辅助色 */
+    --color-secondary: #4ECDC4;
+    --color-success: #4CAF50;
+    --color-warning: #FF9800;
+    --color-danger: #F44336;
+
+    /* 中性色 */
+    --color-bg: #F5F5F5;
+    --color-surface: #FFFFFF;
+    --color-text: #333333;
+    --color-text-secondary: #888888;
+    --color-border: #EEEEEE;
+
+    /* 尺寸 */
+    --nav-height: 64px;
+    --header-height: 56px;
+    --radius: 12px;
+    --radius-sm: 8px;
+    --shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    background: var(--color-bg);
+    color: var(--color-text);
+    padding-top: var(--header-height);
+    padding-bottom: var(--nav-height);
+    min-height: 100vh;
+    -webkit-tap-highlight-color: transparent;
+}
+
+/* ===== 顶部栏 ===== */
+#appHeader {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: var(--header-height);
+    background: var(--color-surface);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 16px;
+    z-index: 100;
+    border-bottom: 1px solid var(--color-border);
+}
+.header-title { font-size: 18px; font-weight: 700; color: var(--color-primary); }
+.header-date { font-size: 12px; color: var(--color-text-secondary); }
+
+/* ===== 页面容器 ===== */
+#appContent {
+    max-width: 480px;
+    margin: 0 auto;
+    padding: 12px 16px;
+}
+.page { display: none; }
+.page.active { display: block; }
+
+/* ===== 卡片 ===== */
+.card {
+    background: var(--color-surface);
+    border-radius: var(--radius);
+    padding: 16px;
+    margin-bottom: 12px;
+    box-shadow: var(--shadow);
+}
+.card-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--color-text);
+    margin-bottom: 12px;
+}
+.card-title:empty { display: none; }
+
+/* ===== 首页 ===== */
+.next-reminder {
+    font-size: 20px;
+    font-weight: 700;
+    color: var(--color-primary);
+    text-align: center;
+    padding: 16px 0;
+}
+.today-list { font-size: 14px; line-height: 1.8; }
+.today-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 0;
+    border-bottom: 1px solid var(--color-border);
+}
+.today-item:last-child { border-bottom: none; }
+.today-item .status-taken { color: var(--color-success); }
+.today-item .status-missed { color: var(--color-danger); }
+.today-item .time { color: var(--color-text-secondary); font-size: 12px; }
+
+/* ===== 计算器 ===== */
+.calc-form { display: flex; flex-direction: column; gap: 8px; }
+.calc-label { font-size: 13px; color: var(--color-text-secondary); margin-top: 4px; }
+.calc-input {
+    width: 100%;
+    padding: 12px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    font-size: 16px;
+    background: var(--color-bg);
+    color: var(--color-text);
+}
+.calc-input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+}
+.quick-preset {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin: 4px 0;
+}
+.quick-preset button {
+    padding: 4px 12px;
+    border: 1px solid var(--color-border);
+    border-radius: 20px;
+    background: var(--color-surface);
+    color: var(--color-text-secondary);
+    font-size: 12px;
+    cursor: pointer;
+}
+.calc-result {
+    margin-top: 16px;
+    padding: 16px;
+    background: var(--color-primary-light);
+    border-radius: var(--radius-sm);
+    text-align: center;
+}
+.calc-result .result-main {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--color-primary-dark);
+}
+.calc-result .result-sub {
+    font-size: 14px;
+    color: var(--color-text-secondary);
+    margin-top: 8px;
+    line-height: 1.6;
+}
+
+/* ===== 日历 ===== */
+.calendar-nav {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+}
+.cal-month-label { font-size: 16px; font-weight: 600; }
+.btn-icon {
+    width: 36px; height: 36px;
+    border: none;
+    background: var(--color-bg);
+    border-radius: 50%;
+    font-size: 20px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--color-text);
+}
+.cal-weekdays {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    text-align: center;
+    font-size: 12px;
+    color: var(--color-text-secondary);
+    margin-bottom: 4px;
+}
+.cal-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 2px;
+}
+.cal-day {
+    aspect-ratio: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    position: relative;
+    min-height: 40px;
+}
+.cal-day.other-month { color: #CCC; }
+.cal-day.today { font-weight: 700; background: var(--color-primary-light); }
+.cal-day.selected { background: var(--color-primary); color: white; }
+.cal-day .dots {
+    display: flex;
+    gap: 3px;
+    margin-top: 2px;
+}
+.cal-day .dot {
+    width: 5px; height: 5px;
+    border-radius: 50%;
+}
+.cal-day .dot.med { background: var(--color-primary); }
+.cal-day .dot.exercise { background: var(--color-secondary); }
+
+/* ===== 日期详情 ===== */
+.day-detail { font-size: 14px; line-height: 1.8; min-height: 40px; }
+.day-detail-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--color-border);
+}
+.day-detail-item:last-child { border-bottom: none; }
+
+/* ===== 设置 ===== */
+.settings-list { margin-bottom: 8px; }
+.settings-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--color-border);
+}
+.settings-item:last-child { border-bottom: none; }
+.settings-item .med-name { font-weight: 600; }
+.settings-item .med-info { font-size: 12px; color: var(--color-text-secondary); }
+.settings-info {
+    font-size: 14px;
+    color: var(--color-text-secondary);
+    margin-bottom: 8px;
+}
+
+.inline-form {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+.inline-form .calc-input { flex: 1; }
+
+/* ===== 空状态 ===== */
+.empty-state {
+    text-align: center;
+    color: var(--color-text-secondary);
+    padding: 16px 0;
+    font-size: 14px;
+}
+
+/* ===== 按钮 ===== */
+.btn {
+    padding: 10px 20px;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: opacity 0.2s;
+}
+.btn:active { opacity: 0.7; }
+.btn-full { width: 100%; margin-top: 8px; }
+.btn-primary { background: var(--color-primary); color: white; }
+.btn-outline { background: var(--color-surface); color: var(--color-primary); border: 1px solid var(--color-primary); }
+
+/* ===== 底部导航 ===== */
+#bottomNav {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: var(--nav-height);
+    background: var(--color-surface);
+    display: flex;
+    border-top: 1px solid var(--color-border);
+    z-index: 100;
+}
+.nav-item {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    border: none;
+    background: none;
+    color: var(--color-text-secondary);
+    cursor: pointer;
+    padding: 4px;
+}
+.nav-item.active { color: var(--color-primary); }
+.nav-icon { font-size: 22px; }
+.nav-label { font-size: 11px; }
+
+/* ===== 弹窗 ===== */
+.modal-overlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.4);
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+}
+.modal-content {
+    background: var(--color-surface);
+    border-radius: var(--radius);
+    padding: 24px;
+    width: 100%;
+    max-width: 400px;
+}
+.modal-title { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
+.modal-buttons {
+    display: flex;
+    gap: 8px;
+    margin-top: 16px;
+}
+.modal-buttons .btn { flex: 1; }

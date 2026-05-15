@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no">
+<title>猫药管家</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- ===== 顶部导航 ===== -->
+<header id="appHeader">
+    <div class="header-title">🐱 猫药管家</div>
+    <div class="header-date" id="headerDate"></div>
+</header>
+
+<!-- ===== 页面容器 ===== -->
+<main id="appContent">
+
+    <!-- ========== 首页 ========== -->
+    <section id="page-home" class="page active">
+        <div class="card">
+            <div class="card-title">⏰ 下次喂药</div>
+            <div id="nextReminder" class="next-reminder">加载中...</div>
+        </div>
+        <div class="card">
+            <div class="card-title">📋 今日用药</div>
+            <div id="todayMeds" class="today-list">加载中...</div>
+        </div>
+        <div class="card">
+            <div class="card-title">🏃 今日运动</div>
+            <div id="todayExercise" class="today-list">
+                <div class="empty-state">今天还没有运动记录</div>
+            </div>
+            <button class="btn btn-primary btn-full" onclick="recordExercise()">记录运动</button>
+        </div>
+    </section>
+
+    <!-- ========== 计算器 ========== -->
+    <section id="page-calc" class="page">
+        <div class="card">
+            <div class="card-title">🧮 分药计算器</div>
+            <div class="calc-form">
+                <label class="calc-label">猫咪体重 (kg)</label>
+                <input type="number" id="calcWeight" class="calc-input" step="0.1" placeholder="例如: 5.0">
+                <label class="calc-label">医嘱剂量 (mg/kg)</label>
+                <input type="number" id="calcDosage" class="calc-input" step="0.5" placeholder="例如: 5">
+                <label class="calc-label">药片规格 (mg/片)</label>
+                <input type="number" id="calcStrength" class="calc-input" step="0.1" placeholder="例如: 30">
+                <div id="quickStrength" class="quick-preset"></div>
+                <button class="btn btn-primary btn-full" onclick="doCalc()">计算</button>
+            </div>
+            <div id="calcResult" class="calc-result" style="display:none"></div>
+        </div>
+    </section>
+
+    <!-- ========== 日历 ========== -->
+    <section id="page-calendar" class="page">
+        <div class="card">
+            <div class="calendar-nav">
+                <button class="btn-icon" onclick="changeMonth(-1)">‹</button>
+                <span id="calMonthYear" class="cal-month-label"></span>
+                <button class="btn-icon" onclick="changeMonth(1)">›</button>
+            </div>
+            <div class="cal-weekdays">
+                <span>日</span><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span>
+            </div>
+            <div id="calGrid" class="cal-grid"></div>
+        </div>
+        <div class="card">
+            <div class="card-title">📝 该日详情</div>
+            <div id="dayDetail" class="day-detail">点击日历中的某天查看详情</div>
+        </div>
+    </section>
+
+    <!-- ========== 设置 ========== -->
+    <section id="page-settings" class="page">
+        <!-- 药品管理 -->
+        <div class="card">
+            <div class="card-title">💊 药品/补剂管理</div>
+            <div id="medList" class="settings-list"></div>
+            <button class="btn btn-outline btn-full" onclick="showAddMed()">+ 添加药品/补剂</button>
+        </div>
+        <!-- 当前体重 -->
+        <div class="card">
+            <div class="card-title">⚖️ 当前体重</div>
+            <div id="currentWeight" class="settings-info">未记录</div>
+            <div class="inline-form">
+                <input type="number" id="newWeight" class="calc-input" step="0.1" placeholder="体重(kg)">
+                <button class="btn btn-primary" onclick="saveWeight()">记录</button>
+            </div>
+        </div>
+        <!-- 权限 -->
+        <div class="card">
+            <div class="card-title">🔐 权限设置</div>
+            <div id="permStatus" class="settings-info">检查中...</div>
+            <button class="btn btn-outline btn-full" onclick="requestPerms()">去设置权限</button>
+        </div>
+    </section>
+
+</main>
+
+<!-- ===== 底部导航 ===== -->
+<nav id="bottomNav">
+    <button class="nav-item active" data-page="home">
+        <span class="nav-icon">🏠</span>
+        <span class="nav-label">首页</span>
+    </button>
+    <button class="nav-item" data-page="calc">
+        <span class="nav-icon">🧮</span>
+        <span class="nav-label">计算器</span>
+    </button>
+    <button class="nav-item" data-page="calendar">
+        <span class="nav-icon">📅</span>
+        <span class="nav-label">日历</span>
+    </button>
+    <button class="nav-item" data-page="settings">
+        <span class="nav-icon">⚙️</span>
+        <span class="nav-label">设置</span>
+    </button>
+</nav>
+
+<!-- ===== 添加药品弹窗 ===== -->
+<div id="medModal" class="modal-overlay" style="display:none">
+    <div class="modal-content">
+        <div class="modal-title">添加药品/补剂</div>
+        <label class="calc-label">名称</label>
+        <input type="text" id="medName" class="calc-input" placeholder="如: 左乙拉西坦">
+        <label class="calc-label">类型</label>
+        <select id="medType" class="calc-input">
+            <option value="drug">💊 药品</option>
+            <option value="supplement">🧪 补剂</option>
+        </select>
+        <div id="strengthGroup">
+            <label class="calc-label">每片 mg 数</label>
+            <input type="number" id="medStrength" class="calc-input" step="0.1" placeholder="如: 30">
+        </div>
+        <div class="modal-buttons">
+            <button class="btn btn-outline" onclick="closeModal()">取消</button>
+            <button class="btn btn-primary" onclick="saveMed()">保存</button>
+        </div>
+    </div>
+</div>
+
+<script src="js/app.js"></script>
+</body>
+</html>
