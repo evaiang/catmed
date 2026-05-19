@@ -13,9 +13,11 @@ import com.yy.catmed.data.entity.*
         MedicationRecord::class,
         CatWeight::class,
         Prescription::class,
-        ExerciseRecord::class
+        ExerciseRecord::class,
+        EventType::class,
+        EventRecord::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -24,6 +26,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun catWeightDao(): CatWeightDao
     abstract fun prescriptionDao(): PrescriptionDao
     abstract fun exerciseRecordDao(): ExerciseRecordDao
+    abstract fun eventTypeDao(): EventTypeDao
+    abstract fun eventRecordDao(): EventRecordDao
 
     companion object {
         @Volatile
@@ -35,7 +39,8 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "catmed_database"
-                ).build()
+                ).fallbackToDestructiveMigration()
+                    .build()
                 INSTANCE = instance
                 instance
             }

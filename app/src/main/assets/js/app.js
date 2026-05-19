@@ -1,164 +1,108 @@
-/* ===================================
-   猫药管家 — 应用逻辑
-   ⚠️ 这部分的代码建议不要修改
-   如果改界面样式，请编辑 style.css
-   如果改页面结构，请编辑 index.html
-   =================================== */
+/* =============================
+   猫药管家 v2 — 应用逻辑
+   ============================= */
+
+// ===== 工具 =====
+function todayStr() {
+    const d = new Date();
+    return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+function tsToStr(ts) {
+    const d = new Date(ts);
+    return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+function dateKey(y,m,d) { return y+'-'+String(m).padStart(2,'0')+'-'+String(d).padStart(2,'0'); }
 
 // ===== 全局状态 =====
-const STATE = {
-    currentPage: 'home',
-    calYear: 0,
-    calMonth: 0,
-    selectedDay: null,
-    medications: [],
-    records: [],
-    exercises: []
-};
+let eventTypes = [];
+let eventRecords = [];
+let calYear = 0, calMonth = 0;
 
-// ===== 工具函数 =====
-function toDateStr(ts) {
-    const d = new Date(ts);
-    return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+// ===== 数据加载（异步） =====
+async function loadTypes() {
+    try {
+        eventTypes = JSON.parse(await Android.getEventTypes());
+    } catch(e) { eventTypes = []; }
 }
-function toTimeStr(ts) {
-    const d = new Date(ts);
-    return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
-}
-function toDisplayDate(ts) {
-    const d = new Date(ts);
-    return d.getFullYear() + '年' + (d.getMonth()+1) + '月' + d.getDate() + '日';
-}
-function getDayStart(ts) {
-    const d = new Date(ts);
-    d.setHours(0,0,0,0);
-    return d.getTime();
-}
-function getDayEnd(ts) {
-    const d = new Date(ts);
-    d.setHours(23,59,59,999);
-    return d.getTime();
+async function loadRecords(year, month) {
+    try {
+        eventRecords = JSON.parse(await Android.getEventRecords(year, month));
+    } catch(e) { eventRecords = []; }
 }
 
 // ===== 导航 =====
 document.querySelectorAll('.nav-item').forEach(btn => {
     btn.addEventListener('click', () => {
-        const page = btn.dataset.page;
-        switchPage(page);
+        const tab = btn.dataset.tab;
+        document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+        document.querySelectorAll('.page').forEach(p => p.classList.toggle('active', p.id === 'page-' + tab));
+        if (tab === 'home') refreshHome();
+        if (tab === 'cal') refreshCalendar();
+        if (tab === 'settings') refreshSettings();
     });
-});
-function switchPage(page) {
-    STATE.currentPage = page;
-    document.querySelectorAll('.nav-item').forEach(b => b.classList.toggle('active', b.dataset.page === page));
-    document.querySelectorAll('.page').forEach(p => p.classList.toggle('active', p.id === 'page-' + page));
-}
-
-// ===== 弹窗 =====
-function showModal() { document.getElementById('medModal').style.display = 'flex'; }
-function closeModal() {
-    document.getElementById('medModal').style.display = 'none';
-    document.getElementById('medName').value = '';
-    document.getElementById('medType').value = 'drug';
-    document.getElementById('medStrength').value = '';
-}
-document.getElementById('medType').addEventListener('change', function() {
-    document.getElementById('strengthGroup').style.display = this.value === 'drug' ? 'block' : 'none';
 });
 
 // ===== 首页 =====
 async function refreshHome() {
-    const meds = JSON.parse(await Android.getMedications());
+    await loadTypes();
     const now = new Date();
-    const start = getDayStart(now.getTime());
-    const end = getDayEnd(now.getTime());
+    await loadRecords(now.getFullYear(), now.getMonth() + 1);
 
-    // 加载今天的喂药记录
-    const recordsRaw = JSON.parse(await Android.getMedicationRecords(now.getFullYear(), now.getMonth()+1));
-    const todayRecords = recordsRaw.filter(r => r.actualTime >= start && r.actualTime <= end);
+    const today = todayStr();
+    const todayRecords = eventRecords.filter(r => tsToStr(r.time) === today && !r.undone);
 
-    // 下次喂药
-    const nextEl = document.getElementById('nextReminder');
-    const todayMeds = document.getElementById('todayMeds');
-
-    if (meds.length === 0) {
-        nextEl.textContent = '请先在「设置」中添加药品';
-        todayMeds.innerHTML = '<div class="empty-state">暂无药品</div>';
+    const el = document.getElementById('eventList');
+    if (eventTypes.length === 0) {
+        el.innerHTML = '<div class="empty-events">暂无事件，去「设置」添加</div>';
+        document.getElementById('todaySummary').textContent = '';
         return;
     }
 
-    // 计算下次喂药时间
-    let nextTime = null;
-    let nextName = '';
-    for (const m of meds) {
-        const slots = [
-            { h: m.reminderHour, m: m.reminderMinute },
-            { h: m.reminderHour2, m: m.reminderMinute2 }
-        ];
-        for (const s of slots) {
-            const t = new Date();
-            t.setHours(s.h, s.m, 0, 0);
-            if (t.getTime() > now.getTime()) {
-                if (!nextTime || t.getTime() < nextTime) {
-                    nextTime = t.getTime();
-                    nextName = m.name;
-                }
-            }
-        }
-    }
-    if (nextTime) {
-        nextEl.innerHTML = '<span class="next-med-name">' + nextName + '</span> 在 ' + toTimeStr(nextTime);
-    } else {
-        nextEl.textContent = '今日提醒已全部完成 ✅';
-    }
-
-    // 今日用药列表
+    let totalDone = 0, totalTarget = 0;
     let html = '';
-    for (const m of meds) {
-        const medRecords = todayRecords.filter(r => r.medicationId === m.id);
-        const taken = medRecords.filter(r => r.status === 'taken');
-        const missed = medRecords.filter(r => r.status === 'missed');
-        const slot1Taken = taken.some(r => {
-            const h = new Date(r.actualTime).getHours();
-            return h < 14;
-        });
-        const slot2Taken = taken.some(r => {
-            const h = new Date(r.actualTime).getHours();
-            return h >= 14;
-        });
-        const s1Time = String(m.reminderHour).padStart(2,'0') + ':' + String(m.reminderMinute).padStart(2,'0');
-        const s2Time = String(m.reminderHour2).padStart(2,'0') + ':' + String(m.reminderMinute2).padStart(2,'0');
-        html += '<div class="today-item">';
-        html += '<div><strong>' + m.name + '</strong><br><span class="time">' + s1Time + ' / ' + s2Time + '</span></div>';
-        html += '<div>';
-        html += slot1Taken ? '<span class="status-taken">✔ 已喂</span>' : '<span class="status-missed">—</span>';
-        html += ' ';
-        html += slot2Taken ? '<span class="status-taken">✔ 已喂</span>' : '<span class="status-missed">—</span>';
-        html += '</div></div>';
-    }
-    todayMeds.innerHTML = html;
+    for (const t of eventTypes) {
+        const count = todayRecords.filter(r => r.typeId === t.id).length;
+        totalDone += count; totalTarget += t.dailyTarget;
 
-    // 运动状态
-    const exRecords = JSON.parse(await Android.getExerciseRecords(now.getFullYear(), now.getMonth()+1));
-    const todayEx = exRecords.filter(r => r.date >= start && r.date <= end);
-    if (todayEx.length > 0) {
-        document.getElementById('todayExercise').innerHTML = todayEx.map(r =>
-            '<div class="today-item"><span>🏃 运动 ' + r.durationMinutes + ' 分钟</span><span class="status-taken">✔</span></div>'
-        ).join('');
-    } else {
-        document.getElementById('todayExercise').innerHTML = '<div class="empty-state">今天还没有运动记录</div>';
+        const slots = [];
+        for (let i = 0; i < t.dailyTarget; i++) {
+            const done = i < count;
+            slots.push(`<button class="event-record-btn ${done?'done':'pending'}"
+                onclick="${done ? 'undoRecord('+t.id+')' : 'addRecord('+t.id+')'}"
+                title="${done?'撤销':'我做了！'}">${done?'✓':''}</button>`);
+        }
+
+        const pct = Math.min(100, Math.round(count / t.dailyTarget * 100));
+        html += `
+            <div class="event-row">
+                <div class="event-icon" style="background:${t.color}20;color:${t.color}"><span class="m-icon lg">${t.icon}</span></div>
+                <div class="event-info">
+                    <div class="event-name">${t.name}</div>
+                    <div class="event-progress-text">${count > 0 ? '已记录 ' + count + ' 次' : '今天还没记录'}</div>
+                    <div class="event-bar-wrap"><div class="event-bar-fill" style="width:${pct}%;background:${t.color}"></div></div>
+                </div>
+                <div class="event-actions">${slots.join('')}</div>
+            </div>`;
     }
+    el.innerHTML = html;
+    document.getElementById('todaySummary').textContent =
+        totalDone > 0 ? '今日已记录 ' + totalDone + ' 次' : '今天还没开始记录';
 }
 
-// 记录运动
-function recordExercise() {
-    const now = new Date();
-    const data = JSON.stringify({
-        date: now.getTime(),
-        durationMinutes: 30,
-        note: ''
-    });
-    Android.saveExerciseRecord(data);
+function addRecord(typeId) {
+    Android.saveEventRecord(JSON.stringify({ typeId, time: Date.now(), undone: false }));
     refreshHome();
+    if (document.querySelector('.page#page-cal.active')) refreshCalendar();
+}
+
+function undoRecord(typeId) {
+    const today = todayStr();
+    const found = eventRecords.filter(r => r.typeId === typeId && tsToStr(r.time) === today && !r.undone);
+    if (found.length > 0) {
+        Android.deleteEventRecord(found[found.length - 1].id);
+    }
+    refreshHome();
+    if (document.querySelector('.page#page-cal.active')) refreshCalendar();
 }
 
 // ===== 计算器 =====
@@ -166,234 +110,298 @@ function doCalc() {
     const w = parseFloat(document.getElementById('calcWeight').value);
     const d = parseFloat(document.getElementById('calcDosage').value);
     const s = parseFloat(document.getElementById('calcStrength').value);
-    if (!w || !d || !s) { alert('请填写所有字段'); return; }
+    if (!w || !d || !s) return;
 
-    const result = JSON.parse(Android.calculateDosage(w, d, s));
+    const needMg = w * d;
+    const pills = needMg / s;
+
+    function gcd(a,b) { return b?gcd(b,a%b):a; }
+    const denom = [1,2,3,4,5,6,8].reduce((best,x) =>
+        Math.abs(pills - Math.round(pills*x)/x) < Math.abs(pills - Math.round(pills*best)/best) ? x : best, 1);
+    const num = Math.round(pills * denom);
+    const g = gcd(num, denom);
+    const fNum = num/g, fDen = denom/g;
+
     const el = document.getElementById('calcResult');
     el.style.display = 'block';
-
-    let fractionStr = '';
-    if (result.fractionDenominator > 1) {
-        fractionStr = '（约 ' + result.fractionNumerator + '/' + result.fractionDenominator + ' 片）';
-    }
-
-    el.innerHTML = `
-        <div class="result-main">${result.pills} 片 ${fractionStr}</div>
-        <div class="result-sub">
-            需要 ${result.requiredMg} mg<br>
-            体重 ${result.weightKg} kg × 剂量 ${result.mgPerKg} mg/kg = ${result.requiredMg} mg<br>
-            ${result.requiredMg} mg ÷ ${result.strengthMg} mg/片 = ${result.pills} 片
-        </div>
-    `;
-}
-// 快速填入药片规格
-function setStrength(val) {
-    document.getElementById('calcStrength').value = val;
+    document.getElementById('calcMainResult').innerHTML =
+        '<span class="big-num">' + needMg.toFixed(1) + '</span><span class="big-unit">mg / 次</span>';
+    document.getElementById('calcDetail').innerHTML =
+        '等于 <span>' + pills.toFixed(2) + '</span> 片' +
+        (fDen > 1 ? '（约 <span>' + fNum + '/' + fDen + '</span> 片）' : '') +
+        '<br>计算过程：' + w + 'kg × ' + d + 'mg/kg = ' + needMg.toFixed(1) + 'mg<br>' +
+        needMg.toFixed(1) + 'mg ÷ ' + s + 'mg/片 = ' + pills.toFixed(2) + '片';
 }
 
 // ===== 日历 =====
-function initCalendar() {
+function initCal() {
     const now = new Date();
-    STATE.calYear = now.getFullYear();
-    STATE.calMonth = now.getMonth() + 1;
-    renderCalendar();
+    calYear = now.getFullYear();
+    calMonth = now.getMonth() + 1;
 }
-function changeMonth(delta) {
-    STATE.calMonth += delta;
-    if (STATE.calMonth > 12) { STATE.calMonth = 1; STATE.calYear++; }
-    if (STATE.calMonth < 1) { STATE.calMonth = 12; STATE.calYear--; }
-    renderCalendar();
+function changeMonth(d) {
+    calMonth += d;
+    if (calMonth > 12) { calMonth = 1; calYear++; }
+    if (calMonth < 1) { calMonth = 12; calYear--; }
+    refreshCalendar();
 }
-async function renderCalendar() {
-    const y = STATE.calYear, m = STATE.calMonth;
-    document.getElementById('calMonthYear').textContent = y + '年' + m + '月';
 
-    // 加载数据
-    STATE.records = JSON.parse(await Android.getMedicationRecords(y, m));
-    STATE.exercises = JSON.parse(await Android.getExerciseRecords(y, m));
+async function refreshCalendar() {
+    await loadTypes();
+    await loadRecords(calYear, calMonth);
 
-    const firstDay = new Date(y, m - 1, 1).getDay();
-    const daysInMonth = new Date(y, m, 0).getDate();
-    const today = new Date();
-    const todayStr = toDateStr(today.getTime());
+    document.getElementById('calLabel').textContent = calYear + '年' + calMonth + '月';
+    const firstDay = new Date(calYear, calMonth-1, 1).getDay();
+    const daysInMonth = new Date(calYear, calMonth, 0).getDate();
+    const prevDays = new Date(calYear, calMonth-1, 0).getDate();
+    const today = todayStr();
+
+    const byDay = {};
+    for (const r of eventRecords) {
+        if (r.undone) continue;
+        const ds = tsToStr(r.time);
+        if (!byDay[ds]) byDay[ds] = {};
+        if (!byDay[ds][r.typeId]) byDay[ds][r.typeId] = 0;
+        byDay[ds][r.typeId]++;
+    }
 
     let html = '';
-    // 上月填充
-    const prevMonthDays = new Date(y, m - 1, 0).getDate();
-    for (let i = firstDay - 1; i >= 0; i--) {
-        html += '<div class="cal-day other-month">' + (prevMonthDays - i) + '</div>';
-    }
-    // 当月
+    for (let i = firstDay-1; i >= 0; i--)
+        html += '<div class="cal-day other">' + (prevDays - i) + '</div>';
+
     for (let d = 1; d <= daysInMonth; d++) {
-        const dateObj = new Date(y, m - 1, d);
-        const dateStr = toDateStr(dateObj.getTime());
-        const isToday = dateStr === todayStr;
-        const isSelected = STATE.selectedDay === dateStr;
-        const dayStart = getDayStart(dateObj.getTime());
-        const dayEnd = getDayEnd(dateObj.getTime());
-
-        const hasMed = STATE.records.some(r => r.actualTime >= dayStart && r.actualTime <= dayEnd && r.status === 'taken');
-        const hasEx = STATE.exercises.some(r => r.date >= dayStart && r.date <= dayEnd);
-
+        const ds = dateKey(calYear, calMonth, d);
+        const isToday = ds === today;
+        const dayData = byDay[ds] || {};
         let cls = 'cal-day';
         if (isToday) cls += ' today';
-        if (isSelected) cls += ' selected';
 
         let dots = '';
-        if (hasMed || hasEx) {
-            dots = '<div class="dots">';
-            if (hasMed) dots += '<span class="dot med"></span>';
-            if (hasEx) dots += '<span class="dot exercise"></span>';
-            dots += '</div>';
+        for (const t of eventTypes) {
+            const count = dayData[t.id] || 0;
+            const pct = count / t.dailyTarget;
+            if (pct >= 1)
+                dots += '<span class="cal-dot" style="background:' + t.color + '"></span>';
+            else if (pct > 0)
+                dots += '<span class="cal-dot" style="background:' + t.color + ';opacity:0.4"></span>';
         }
 
-        html += '<div class="' + cls + '" data-date="' + dateStr + '" onclick="selectDay(\'' + dateStr + '\')">' + d + dots + '</div>';
+        html += '<div class="' + cls + '" data-ds="' + ds + '" onclick="pickDay(\'' + ds + '\')">'
+            + d + '<div class="cal-dots">' + dots + '</div></div>';
     }
-    // 下月填充
-    const totalCells = firstDay + daysInMonth;
-    const remaining = (7 - totalCells % 7) % 7;
-    for (let i = 1; i <= remaining; i++) {
-        html += '<div class="cal-day other-month">' + i + '</div>';
-    }
+
+    const total = firstDay + daysInMonth;
+    const rem = (7 - total % 7) % 7;
+    for (let i = 1; i <= rem; i++)
+        html += '<div class="cal-day other">' + i + '</div>';
+
     document.getElementById('calGrid').innerHTML = html;
 
-    // 显示选中日详情
-    if (STATE.selectedDay && STATE.selectedDay.startsWith(y + '-' + String(m).padStart(2,'0'))) {
-        showDayDetail(STATE.selectedDay);
-    } else {
-        STATE.selectedDay = todayStr;
-        showDayDetail(todayStr);
+    document.getElementById('calLegend').innerHTML = eventTypes.map(t =>
+        '<div class="cal-legend-item"><span class="cal-legend-dot" style="background:' + t.color + '"></span>' + t.name + '</div>'
+    ).join('');
+
+    refreshMonthStats();
+}
+
+function pickDay(ds) {
+    document.querySelectorAll('.cal-day.selected').forEach(x => x.classList.remove('selected'));
+    const el = document.querySelector('.cal-day[data-ds="' + ds + '"]');
+    if (el) el.classList.add('selected');
+
+    const dayData = {};
+    for (const r of eventRecords) {
+        if (tsToStr(r.time) === ds && !r.undone) {
+            if (!dayData[r.typeId]) dayData[r.typeId] = 0;
+            dayData[r.typeId]++;
+        }
     }
-}
-function selectDay(dateStr) {
-    STATE.selectedDay = dateStr;
-    renderCalendar();
-}
-function showDayDetail(dateStr) {
-    const parts = dateStr.split('-');
-    const dayStart = getDayStart(new Date(parseInt(parts[0]), parseInt(parts[1])-1, parseInt(parts[2])).getTime());
-    const dayEnd = getDayEnd(dayStart);
-    const el = document.getElementById('dayDetail');
+    const parts = ds.split('-');
+    const label = parts[0] + '年' + parseInt(parts[1]) + '月' + parseInt(parts[2]) + '日';
 
-    const dayRecords = STATE.records.filter(r => r.actualTime >= dayStart && r.actualTime <= dayEnd);
-    const dayExercises = STATE.exercises.filter(r => r.date >= dayStart && r.date <= dayEnd);
+    let html = '<div style="font-weight:600;margin-bottom:6px">' + label + '</div>';
+    let hasAny = false;
+    for (const t of eventTypes) {
+        const c = dayData[t.id] || 0;
+        if (c > 0) hasAny = true;
+        const desc = c > 0
+            ? '<span style="color:var(--c-success);font-weight:500">已记录 ' + c + ' 次</span>'
+            : '<span style="color:var(--c-text-secondary)">未记录</span>';
+        html += '<div><span class="m-icon" style="font-size:16px;color:' + t.color + '">' + t.icon + '</span> ' + t.name + '：' + desc + '</div>';
+    }
+    if (!hasAny) html += '<div class="no-record">这天还没有记录</div>';
+    document.getElementById('daySummary').innerHTML = html;
+}
 
-    if (dayRecords.length === 0 && dayExercises.length === 0) {
-        el.innerHTML = '<div class="empty-state">' + toDisplayDate(dayStart) + ' 无记录</div>';
+function refreshMonthStats() {
+    const start = new Date(calYear, calMonth-1, 1).getTime();
+    const end = new Date(calYear, calMonth, 0, 23, 59, 59).getTime();
+
+    const stats = {};
+    const daysInMonth = new Date(calYear, calMonth, 0).getDate();
+    for (const r of eventRecords) {
+        if (r.time >= start && r.time <= end && !r.undone) {
+            if (!stats[r.typeId]) stats[r.typeId] = 0;
+            stats[r.typeId]++;
+        }
+    }
+
+    let html = '';
+    for (const t of eventTypes) {
+        const count = stats[t.id] || 0;
+        const target = t.dailyTarget * daysInMonth;
+        const pct = target > 0 ? Math.round(count / target * 100) : 0;
+        const bar = '█'.repeat(Math.round(pct/10)) + '░'.repeat(10 - Math.round(pct/10));
+        html += '<div style="margin-bottom:8px">' +
+            '<span><span class="m-icon" style="font-size:16px;color:' + t.color + '">' + t.icon + '</span> <strong>' + t.name + '</strong></span>' +
+            '<span style="float:right;color:var(--c-text-secondary)">' + count + ' / ' + target + ' 次</span>' +
+            '<div style="font-size:10px;color:#CCC;letter-spacing:2px;margin-top:2px">' + bar + ' ' + pct + '%</div>' +
+            '</div>';
+    }
+    document.getElementById('monthStats').innerHTML = html;
+}
+
+// ===== 设置 =====
+async function refreshSettings() {
+    await loadTypes();
+    const el = document.getElementById('typeList');
+    if (eventTypes.length === 0) {
+        el.innerHTML = '<div class="empty-events">暂无事件类型，点上方按钮添加</div>';
         return;
     }
-
-    let html = '<div style="font-weight:600;margin-bottom:8px">' + toDisplayDate(dayStart) + '</div>';
-
-    for (const r of dayRecords) {
-        const statusText = r.status === 'taken' ? '✅ 已喂' : (r.status === 'missed' ? '❌ 漏服' : '⏰ 推迟');
-        const dosageText = r.dosageMg ? ' | ' + r.dosageMg + 'mg' : '';
-        html += '<div class="day-detail-item">💊 ' + toTimeStr(r.actualTime) + ' ' + statusText + dosageText + '</div>';
-    }
-    for (const r of dayExercises) {
-        html += '<div class="day-detail-item">🏃 运动 ' + r.durationMinutes + ' 分钟' + (r.note ? ' | ' + r.note : '') + '</div>';
-    }
-    el.innerHTML = html;
+    el.innerHTML = eventTypes.map(t => {
+        let reminders = [];
+        try { reminders = JSON.parse(t.reminders); } catch(e) {}
+        const remStr = t.remindOn && reminders.length > 0
+            ? '提醒 ' + reminders.join('、')
+            : '不提醒';
+        return `<div class="event-type-item">
+            <div class="event-type-icon" style="background:${t.color}20;color:${t.color}"><span class="m-icon lg">${t.icon}</span></div>
+            <div class="event-type-info">
+                <div class="event-type-name">${t.name}</div>
+                <div class="event-type-meta">每日 ${t.dailyTarget} 次 · ${remStr}</div>
+            </div>
+            <button class="btn btn-sm btn-outline" onclick="editType(${t.id})" style="margin-right:4px">编辑</button>
+            <button class="delete-btn" onclick="deleteType(${t.id})">删除</button>
+        </div>`;
+    }).join('');
 }
 
-// ===== 设置 - 药品管理 =====
-async function refreshSettings() {
-    const meds = JSON.parse(await Android.getMedications());
-    const el = document.getElementById('medList');
+// ===== 弹窗（事件类型编辑） =====
+let remindOn = true;
+let remindTimes = ['08:00'];
 
-    if (meds.length === 0) {
-        el.innerHTML = '<div class="empty-state">暂未添加药品或补剂</div>';
-    } else {
-        el.innerHTML = meds.map(m => {
-            const type = m.type === 'drug' ? '💊' : '🧪';
-            const strength = m.strengthMg ? m.strengthMg + 'mg/片' : '—';
-            return '<div class="settings-item">' +
-                '<div><span class="med-name">' + type + ' ' + m.name + '</span><br><span class="med-info">' + strength + '</span></div>' +
-                '<button class="btn btn-outline" style="padding:4px 12px;font-size:12px" onclick="deleteMed(' + m.id + ')">删除</button>' +
-                '</div>';
-        }).join('');
-    }
-
-    // 体重
-    const weight = JSON.parse(await Android.getLatestWeight());
-    if (weight && weight.weightKg) {
-        document.getElementById('currentWeight').textContent = weight.weightKg + ' kg（' + toDisplayDate(weight.date) + '）';
-    }
-
-    // 权限
-    const hasOverlay = Android.hasOverlayPermission();
-    const hasAlarm = Android.hasExactAlarmPermission();
-    document.getElementById('permStatus').innerHTML =
-        '悬浮窗权限：' + (hasOverlay ? '✅ 已授权' : '❌ 未授权') + '<br>' +
-        '精确闹钟权限：' + (hasAlarm ? '✅ 已授权' : '❌ 未授权');
+function showAddType() {
+    document.getElementById('typeModalTitle').textContent = '添加事件类型';
+    document.getElementById('editTypeId').value = '';
+    document.getElementById('typeName').value = '';
+    document.getElementById('typeIcon').value = 'pill';
+    document.getElementById('typeColor').value = '#0891B2';
+    document.getElementById('typeDaily').value = 2;
+    remindOn = true;
+    document.getElementById('typeRemindToggle').className = 'event-type-toggle on';
+    document.getElementById('remindTimesField').style.display = 'block';
+    remindTimes = ['08:00'];
+    renderRemindPills();
+    document.getElementById('typeModal').style.display = 'flex';
 }
 
-function showAddMed() {
-    showModal();
-    document.getElementById('medStrength').value = '';
-    document.getElementById('strengthGroup').style.display = 'block';
+function editType(id) {
+    const t = eventTypes.find(x => x.id === id);
+    if (!t) return;
+    document.getElementById('typeModalTitle').textContent = '编辑事件类型';
+    document.getElementById('editTypeId').value = id;
+    document.getElementById('typeName').value = t.name;
+    document.getElementById('typeIcon').value = t.icon;
+    document.getElementById('typeColor').value = t.color;
+    document.getElementById('typeDaily').value = t.dailyTarget;
+    remindOn = t.remindOn;
+    document.getElementById('typeRemindToggle').className = 'event-type-toggle' + (remindOn ? ' on' : '');
+    document.getElementById('remindTimesField').style.display = remindOn ? 'block' : 'none';
+    try { remindTimes = JSON.parse(t.reminders); } catch(e) { remindTimes = ['08:00']; }
+    if (remindTimes.length === 0) remindTimes = ['08:00'];
+    renderRemindPills();
+    document.getElementById('typeModal').style.display = 'flex';
 }
 
-function saveMed() {
-    const name = document.getElementById('medName').value.trim();
-    const type = document.getElementById('medType').value;
-    const strength = parseFloat(document.getElementById('medStrength').value);
-    if (!name) { alert('请输入名称'); return; }
+function closeTypeModal() {
+    document.getElementById('typeModal').style.display = 'none';
+}
 
-    const data = {
-        name: name,
-        type: type,
-        strengthMg: type === 'drug' && strength ? strength : null,
-        reminderHour: 8, reminderMinute: 30,
-        reminderHour2: 20, reminderMinute2: 30
+function toggleRemind() {
+    remindOn = !remindOn;
+    document.getElementById('typeRemindToggle').className = 'event-type-toggle' + (remindOn ? ' on' : '');
+    document.getElementById('remindTimesField').style.display = remindOn ? 'block' : 'none';
+}
+
+function addRemindTime() {
+    if (remindTimes.length >= 8) return;
+    remindTimes.push('12:00');
+    renderRemindPills();
+}
+
+function removeRemindTime(i) { remindTimes.splice(i, 1); renderRemindPills(); }
+function updateRemindTime(i, val) { remindTimes[i] = val; }
+
+function renderRemindPills() {
+    const el = document.getElementById('remindPills');
+    el.innerHTML = remindTimes.map((t, i) =>
+        '<span class="time-pill selected">' +
+        '<input type="time" value="' + t + '" onchange="updateRemindTime(' + i + ', this.value)" style="border:none;background:none;font-size:12px;width:auto;padding:0">' +
+        (remindTimes.length > 1 ? '<span class="remove" onclick="removeRemindTime(' + i + ')">×</span>' : '') +
+        '</span>'
+    ).join('');
+}
+
+async function saveType() {
+    const name = document.getElementById('typeName').value.trim();
+    if (!name) return;
+    const editId = document.getElementById('editTypeId').value;
+
+    const obj = {
+        id: editId ? parseInt(editId) : 0,
+        name,
+        icon: document.getElementById('typeIcon').value,
+        color: document.getElementById('typeColor').value,
+        dailyTarget: parseInt(document.getElementById('typeDaily').value) || 1,
+        reminders: JSON.stringify(remindOn ? remindTimes : []),
+        remindOn
     };
-    Android.saveMedication(JSON.stringify(data));
-    closeModal();
-    setTimeout(() => { refreshHome(); refreshSettings(); }, 300);
+
+    Android.saveEventType(JSON.stringify(obj));
+    closeTypeModal();
+    await loadTypes();
+    refreshHome(); refreshCalendar(); refreshSettings();
 }
 
-function deleteMed(id) {
-    if (!confirm('确定删除此药品？')) return;
-    Android.deleteMedication(id);
-    setTimeout(() => { refreshHome(); refreshSettings(); }, 300);
+async function deleteType(id) {
+    if (!confirm('确定删除此事件类型？')) return;
+    Android.deleteEventType(id);
+    await loadTypes();
+    refreshHome(); refreshCalendar(); refreshSettings();
 }
 
-// 保存体重
-function saveWeight() {
-    const w = parseFloat(document.getElementById('newWeight').value);
-    if (!w) { alert('请输入体重'); return; }
-    Android.saveWeight(JSON.stringify({ weightKg: w, date: Date.now() }));
-    document.getElementById('newWeight').value = '';
-    refreshSettings();
+// ===== 快速选择药片规格 =====
+function setupQuickPills() {
+    let btns = '<button onclick="document.getElementById(\'calcStrength\').value=\'30\'">30mg</button>' +
+               '<button onclick="document.getElementById(\'calcStrength\').value=\'50\'">50mg</button>';
+    document.getElementById('quickPills').innerHTML = btns;
 }
 
-// 权限
+// ===== 权限 =====
 function requestPerms() {
     if (!Android.hasOverlayPermission()) Android.openOverlaySettings();
 }
 
-// ===== 刷新数据 =====
-async function refreshData() {
-    await refreshHome();
-    if (STATE.currentPage === 'settings') await refreshSettings();
-}
-
 // ===== 初始化 =====
 document.addEventListener('DOMContentLoaded', async function() {
-    // 更新日期头
-    document.getElementById('headerDate').textContent = toDisplayDate(Date.now());
+    document.getElementById('headerDate').textContent =
+        new Date().toLocaleDateString('zh-CN', { year:'numeric', month:'long', day:'numeric', weekday:'short' });
 
-    // 检查是否有预设药品，填入快速选择
-    const meds = JSON.parse(await Android.getMedications());
-    const drugs = meds.filter(m => m.type === 'drug' && m.strengthMg);
-    if (drugs.length > 0) {
-        const container = document.getElementById('quickStrength');
-        container.innerHTML = drugs.map(m =>
-            '<button onclick="setStrength(' + m.strengthMg + ')">' + m.name + ' ' + m.strengthMg + 'mg</button>'
-        ).join('');
-    }
-
-    initCalendar();
-    await refreshHome();
-    await refreshSettings();
+    setupQuickPills();
+    initCal();
+    await loadTypes();
+    refreshHome();
+    refreshCalendar();
+    refreshSettings();
 });

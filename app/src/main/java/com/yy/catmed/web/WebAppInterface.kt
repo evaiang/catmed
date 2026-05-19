@@ -27,7 +27,7 @@ class WebAppInterface(private val context: Context) {
     private val db by lazy { AppDatabase.getInstance(context) }
     private val scope = CoroutineScope(Dispatchers.IO)
 
-    // ========== 药品管理 ==========
+    // ========== 药品管理（v1 兼容） ==========
 
     @JavascriptInterface
     fun getMedications(): String {
@@ -67,7 +67,6 @@ class WebAppInterface(private val context: Context) {
                 reminderMinute2 = obj.optInt("reminderMinute2", 30)
             )
             val id = db.medicationDao().insert(med)
-            // 注册提醒
             if (id > 0) {
                 val savedMed = med.copy(id = id)
                 ReminderAlarmReceiver.scheduleAlarm(context, savedMed, 1)
@@ -79,14 +78,13 @@ class WebAppInterface(private val context: Context) {
     @JavascriptInterface
     fun deleteMedication(id: Long) {
         scope.launch {
-            val med = db.medicationDao().getActiveMedicationsList().find { it.id == id }
-            if (med != null) {
-                db.medicationDao().delete(med)
-            }
+            val meds = db.medicationDao().getActiveMedicationsList()
+            val med = meds.find { it.id == id }
+            if (med != null) db.medicationDao().delete(med)
         }
     }
 
-    // ========== 喂药记录 ==========
+    // ========== 喂药记录（v1 兼容） ==========
 
     @JavascriptInterface
     fun getMedicationRecords(year: Int, month: Int): String {
@@ -134,7 +132,106 @@ class WebAppInterface(private val context: Context) {
         }
     }
 
-    // ========== 体重 ==========
+    // ========== 事件类型（v2 通用模型） ==========
+
+    @JavascriptInterface
+    fun getEventTypes(): String {
+        return runBlocking {
+            val types = db.eventTypeDao().getActiveTypesList()
+            val arr = JSONArray()
+            for (t in types) {
+                arr.put(JSONObject().apply {
+                    put("id", t.id)
+                    put("name", t.name)
+                    put("icon", t.icon)
+                    put("color", t.color)
+                    put("dailyTarget", t.dailyTarget)
+                    put("reminders", t.reminders)
+                    put("remindOn", t.remindOn)
+                })
+            }
+            arr.toString()
+        }
+    }
+
+    @JavascriptInterface
+    fun saveEventType(json: String) {
+        scope.launch {
+            val obj = JSONObject(json)
+            val type = EventType(
+                id = obj.optLong("id", 0),
+                name = obj.getString("name"),
+                icon = obj.optString("icon", "pill"),
+                color = obj.optString("color", "#0891B2"),
+                dailyTarget = obj.optInt("dailyTarget", 2),
+                reminders = obj.optString("reminders", "[]"),
+                remindOn = obj.optBoolean("remindOn", true)
+            )
+            if (type.id > 0) {
+                db.eventTypeDao().update(type)
+            } else {
+                db.eventTypeDao().insert(type)
+            }
+        }
+    }
+
+    @JavascriptInterface
+    fun deleteEventType(id: Long) {
+        scope.launch {
+            val type = db.eventTypeDao().getById(id) ?: return@launch
+            db.eventTypeDao().delete(type)
+        }
+    }
+
+    // ========== 事件记录（v2 通用模型） ==========
+
+    @JavascriptInterface
+    fun getEventRecords(year: Int, month: Int): String {
+        return runBlocking {
+            val cal = Calendar.getInstance()
+            cal.set(year, month - 1, 1, 0, 0, 0)
+            val start = cal.timeInMillis
+            cal.set(Calendar.DAY_OF_MONTH, cal.getActualMaximum(Calendar.DAY_OF_MONTH))
+            cal.set(Calendar.HOUR_OF_DAY, 23)
+            cal.set(Calendar.MINUTE, 59)
+            cal.set(Calendar.SECOND, 59)
+            val end = cal.timeInMillis
+
+            val records = db.eventRecordDao().getRecordsInRange(start, end)
+            val arr = JSONArray()
+            for (r in records) {
+                arr.put(JSONObject().apply {
+                    put("id", r.id)
+                    put("typeId", r.typeId)
+                    put("time", r.time)
+                    put("undone", r.undone)
+                })
+            }
+            arr.toString()
+        }
+    }
+
+    @JavascriptInterface
+    fun saveEventRecord(json: String) {
+        scope.launch {
+            val obj = JSONObject(json)
+            val record = EventRecord(
+                typeId = obj.getLong("typeId"),
+                time = obj.getLong("time"),
+                undone = obj.optBoolean("undone", false)
+            )
+            db.eventRecordDao().insert(record)
+        }
+    }
+
+    @JavascriptInterface
+    fun deleteEventRecord(id: Long) {
+        scope.launch {
+            db.eventRecordDao().deleteById(id)
+        }
+    }
+
+    // ========== 体重（v1 兼容） ==========
 
     @JavascriptInterface
     fun getLatestWeight(): String {
@@ -163,86 +260,12 @@ class WebAppInterface(private val context: Context) {
         }
     }
 
-    // ========== 医嘱 ==========
-
-    @JavascriptInterface
-    fun getActivePrescriptions(): String {
-        return runBlocking {
-            val prescs = db.prescriptionDao().getActivePrescriptions()
-            val arr = JSONArray()
-            for (p in prescs) {
-                arr.put(JSONObject().apply {
-                    put("id", p.id)
-                    put("medicationId", p.medicationId)
-                    put("dosageMgPerKg", p.dosageMgPerKg)
-                    put("startDate", p.startDate)
-                })
-            }
-            arr.toString()
-        }
-    }
-
-    @JavascriptInterface
-    fun savePrescription(json: String) {
-        scope.launch {
-            val obj = JSONObject(json)
-            val p = Prescription(
-                medicationId = obj.getLong("medicationId"),
-                dosageMgPerKg = obj.getDouble("dosageMgPerKg"),
-                startDate = obj.optLong("startDate", System.currentTimeMillis())
-            )
-            db.prescriptionDao().insert(p)
-        }
-    }
-
-    // ========== 运动记录 ==========
-
-    @JavascriptInterface
-    fun saveExerciseRecord(json: String) {
-        scope.launch {
-            val obj = JSONObject(json)
-            val record = ExerciseRecord(
-                date = obj.getLong("date"),
-                durationMinutes = obj.optInt("durationMinutes", 30),
-                note = obj.optString("note", "")
-            )
-            db.exerciseRecordDao().insert(record)
-        }
-    }
-
-    @JavascriptInterface
-    fun getExerciseRecords(year: Int, month: Int): String {
-        return runBlocking {
-            val cal = Calendar.getInstance()
-            cal.set(year, month - 1, 1, 0, 0, 0)
-            val start = cal.timeInMillis
-            cal.set(Calendar.DAY_OF_MONTH, cal.getActualMaximum(Calendar.DAY_OF_MONTH))
-            cal.set(Calendar.HOUR_OF_DAY, 23)
-            cal.set(Calendar.MINUTE, 59)
-            cal.set(Calendar.SECOND, 59)
-            val end = cal.timeInMillis
-
-            val records = db.exerciseRecordDao().getRecordsInRange(start, end)
-            val arr = JSONArray()
-            for (r in records) {
-                arr.put(JSONObject().apply {
-                    put("id", r.id)
-                    put("date", r.date)
-                    put("durationMinutes", r.durationMinutes)
-                    put("note", r.note)
-                })
-            }
-            arr.toString()
-        }
-    }
-
     // ========== 剂量计算 ==========
 
     @JavascriptInterface
     fun calculateDosage(weightKg: Double, mgPerKg: Double, strengthMg: Double): String {
-        val requiredMg = weightKg * mgPerKg        // 需要多少mg
-        val pills = requiredMg / strengthMg         // 折合多少片
-        // 最接近的分数表示（简化分药）
+        val requiredMg = weightKg * mgPerKg
+        val pills = requiredMg / strengthMg
         val fractions = findSimplestFraction(pills)
         return JSONObject().apply {
             put("requiredMg", Math.round(requiredMg * 100.0) / 100.0)
@@ -255,7 +278,6 @@ class WebAppInterface(private val context: Context) {
         }.toString()
     }
 
-    // 找最近似的分数（分母不超过8，方便分药）
     private fun findSimplestFraction(value: Double): Pair<Int, Int> {
         val best = (1..8).minBy { denom ->
             val num = Math.round(value * denom).toInt()
